@@ -8,14 +8,12 @@ import wntr
 import openai
 import os
 
-# ✅ Initialize the FastAPI app
 app = FastAPI(
     title="WNTR GPT Simulation API",
     description="REST API for hydraulic simulation and GPT-assisted analysis of water distribution networks using WNTR and EPANET.",
     version="1.0.0"
 )
 
-# ✅ Enable CORS for frontend use (if needed)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -23,10 +21,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ✅ Load OpenAI API Key from environment
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
-# ---------------------- SIMULATION ---------------------- #
+@app.get("/")
+def read_root():
+    return {"message": "WNTR GPT API is live. Use /simulate, /analyze, or /ask."}
+
 @app.post("/simulate")
 async def run_simulation(
     inp_file: UploadFile = File(...),
@@ -36,7 +36,6 @@ async def run_simulation(
     demand_model: str = Form("PDD"),
     report_status: str = Form("YES")
 ):
-    # ✅ Validate file extension
     if not inp_file.filename.lower().endswith(".inp"):
         return JSONResponse(status_code=400, content={"error": "Only .inp files are supported."})
 
@@ -57,7 +56,6 @@ async def run_simulation(
             sim = wntr.sim.WNTRSimulator(wn)
 
         results = sim.run_sim()
-
         pressure = results.node["pressure"]
         demand = results.node["demand"]
 
@@ -69,7 +67,6 @@ async def run_simulation(
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": str(e)})
 
-# ---------------------- ANALYSIS ---------------------- #
 class AnalysisRequest(BaseModel):
     analysis_type: str
     simulation_results: dict
@@ -78,9 +75,7 @@ class AnalysisRequest(BaseModel):
 def run_advanced_analysis(request: AnalysisRequest):
     try:
         pressure_df = pd.DataFrame(request.simulation_results.get("pressure", {}))
-
-        # Placeholder: reloading network from a static source if needed
-        wn = wntr.network.WaterNetworkModel()  # You must provide a way to restore the WN for full functionality
+        wn = wntr.network.WaterNetworkModel()  # Placeholder only
 
         if request.analysis_type == "Resilience":
             result = wntr.metrics.resilience.reliability(pressure_df)
@@ -97,7 +92,6 @@ def run_advanced_analysis(request: AnalysisRequest):
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": str(e)})
 
-# ---------------------- GPT INTERFACE ---------------------- #
 class GPTRequest(BaseModel):
     user_question: str
     pressure_summary: str
@@ -129,4 +123,13 @@ Now answer the user's question: "{request.user_question}"
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": str(e)})
 
+
+
+
+       
+   
+
+
+
+   
        
