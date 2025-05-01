@@ -1,3 +1,32 @@
+from fastapi import FastAPI, UploadFile, File, Form
+from fastapi.responses import JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+import tempfile
+import pandas as pd
+import wntr
+import openai
+import os
+
+# ✅ Initialize the FastAPI app
+app = FastAPI(
+    title="WNTR GPT Simulation API",
+    description="REST API for hydraulic simulation and GPT-assisted analysis of water distribution networks using WNTR and EPANET.",
+    version="1.0.0"
+)
+
+# ✅ Enable CORS for frontend use (if needed)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# ✅ Load OpenAI API Key from environment
+openai.api_key = os.getenv("OPENAI_API_KEY")
+
+# ---------------------- SIMULATION ---------------------- #
 @app.post("/simulate")
 async def run_simulation(
     inp_file: UploadFile = File(...),
@@ -39,3 +68,65 @@ async def run_simulation(
 
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": str(e)})
+
+# ---------------------- ANALYSIS ---------------------- #
+class AnalysisRequest(BaseModel):
+    analysis_type: str
+    simulation_results: dict
+
+@app.post("/analyze")
+def run_advanced_analysis(request: AnalysisRequest):
+    try:
+        pressure_df = pd.DataFrame(request.simulation_results.get("pressure", {}))
+
+        # Placeholder: reloading network from a static source if needed
+        wn = wntr.network.WaterNetworkModel()  # You must provide a way to restore the WN for full functionality
+
+        if request.analysis_type == "Resilience":
+            result = wntr.metrics.resilience.reliability(pressure_df)
+            return {"result": round(result, 4)}
+
+        elif request.analysis_type == "Economic Loss":
+            population = wntr.metrics.population.estimate_population(wn)
+            results = wntr.sim.WNTRSimulator(wn).run_sim()
+            loss = wntr.metrics.economic_loss.economic_loss(results, population)
+            return {"result": round(loss.sum().sum(), 2)}
+
+        return {"result": "Analysis type not implemented or requires network state."}
+
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": str(e)})
+
+# ---------------------- GPT INTERFACE ---------------------- #
+class GPTRequest(BaseModel):
+    user_question: str
+    pressure_summary: str
+    demand_summary: str
+
+@app.post("/ask")
+def ask_gpt_assistant(request: GPTRequest):
+    try:
+        prompt = f"""
+You are a hydraulic engineering assistant. The user has run a water network simulation.
+Here is a summary of node pressures:
+{request.pressure_summary}
+
+Here is a summary of node demands:
+{request.demand_summary}
+
+Now answer the user's question: "{request.user_question}"
+"""
+        response = openai.ChatCompletion.create(
+            model="gpt-4",
+            messages=[
+                {"role": "system", "content": "You are a civil engineering assistant who specializes in hydraulic analysis using EPANET and WNTR."},
+                {"role": "user", "content": prompt}
+            ]
+        )
+        answer = response["choices"][0]["message"]["content"]
+        return {"answer": answer}
+
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": str(e)})
+
+       
