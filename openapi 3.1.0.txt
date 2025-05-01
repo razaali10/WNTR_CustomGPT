@@ -1,0 +1,114 @@
+openapi: 3.1.0
+info:
+  title: WNTR GPT Simulation API
+  description: REST API for hydraulic simulation and GPT-assisted analysis of water distribution networks using WNTR and EPANET.
+  version: 1.0.0
+servers:
+  - url: https://your-render-domain.onrender.com
+    description: Hosted Render API
+
+paths:
+  /simulate:
+    post:
+      operationId: runSimulation
+      summary: Run a WNTR hydraulic or water quality simulation.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                inp_file:
+                  type: string
+                  format: binary
+                simulation_type:
+                  type: string
+                  enum: [EPANET, Hydraulic Only, Water Quality Simulation]
+                duration:
+                  type: integer
+                  default: 24
+                hydraulic_timestep:
+                  type: integer
+                  default: 60
+                demand_model:
+                  type: string
+                  enum: [PDD, CDD]
+                report_status:
+                  type: string
+                  enum: [YES, NO]
+      responses:
+        '200':
+          description: Simulation results (pressure and demand time series).
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  pressure:
+                    type: object
+                    additionalProperties:
+                      type: array
+                      items: { type: number }
+                  demand:
+                    type: object
+                    additionalProperties:
+                      type: array
+                      items: { type: number }
+
+  /analyze:
+    post:
+      operationId: runAdvancedAnalysis
+      summary: Perform additional analysis on the simulated network.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                analysis_type:
+                  type: string
+                  enum: [Pipe Failure, Resilience, Economic Loss, Multiple Failures]
+                simulation_results:
+                  type: object
+                  description: JSON object returned from `/simulate`
+      responses:
+        '200':
+          description: Result of the analysis (chart data or metrics).
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  result:
+                    type: string
+                    description: JSON or text describing the analysis result
+
+  /ask:
+    post:
+      operationId: askGptAssistant
+      summary: Ask a GPT-4 assistant about the simulation results.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                user_question:
+                  type: string
+                pressure_summary:
+                  type: string
+                demand_summary:
+                  type: string
+      responses:
+        '200':
+          description: GPT-4 generated answer.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  answer:
+                    type: string
