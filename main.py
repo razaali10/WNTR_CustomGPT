@@ -25,7 +25,7 @@ openai.api_key = os.getenv("OPENAI_API_KEY")
 
 @app.get("/")
 def read_root():
-    return {"message": "WNTR GPT API is live. Use /simulate, /analyze, or /ask."}
+    return {"message": "WNTR GPT API is live. Use /simulate, /simulateFromText, /analyze, or /ask."}
 
 @app.post("/simulate")
 async def run_simulation(
@@ -67,6 +67,43 @@ async def run_simulation(
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": str(e)})
 
+@app.post("/simulateFromText")
+async def simulate_from_text(
+    inp_content: str = Form(...),
+    simulation_type: str = Form("EPANET"),
+    duration: int = Form(24),
+    hydraulic_timestep: int = Form(60),
+    demand_model: str = Form("PDD"),
+    report_status: str = Form("YES")
+):
+    try:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".inp", mode="w") as temp:
+            temp.write(inp_content)
+            inp_path = temp.name
+
+        wn = wntr.network.WaterNetworkModel(inp_path)
+        wn.options.time.duration = duration * 3600
+        wn.options.time.hydraulic_timestep = hydraulic_timestep * 60
+        wn.options.hydraulic.demand_model = demand_model
+        wn.options.report.status = report_status
+
+        if simulation_type == "EPANET":
+            sim = wntr.sim.EpanetSimulator(wn)
+        else:
+            sim = wntr.sim.WNTRSimulator(wn)
+
+        results = sim.run_sim()
+        pressure = results.node["pressure"]
+        demand = results.node["demand"]
+
+        return {
+            "pressure": pressure.to_dict(),
+            "demand": demand.to_dict()
+        }
+
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": str(e)})
+
 class AnalysisRequest(BaseModel):
     analysis_type: str
     simulation_results: dict
@@ -75,7 +112,7 @@ class AnalysisRequest(BaseModel):
 def run_advanced_analysis(request: AnalysisRequest):
     try:
         pressure_df = pd.DataFrame(request.simulation_results.get("pressure", {}))
-        wn = wntr.network.WaterNetworkModel()  # Placeholder only
+        wn = wntr.network.WaterNetworkModel()  # Placeholder; load as needed
 
         if request.analysis_type == "Resilience":
             result = wntr.metrics.resilience.reliability(pressure_df)
@@ -122,6 +159,12 @@ Now answer the user's question: "{request.user_question}"
 
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": str(e)})
+
+
+
+
+
+
 
 
 
